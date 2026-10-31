@@ -46,7 +46,7 @@
         .img-preview-container { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.75rem; }
         .img-preview-wrapper { position: relative; border: 1px solid var(--border); border-radius: 4px; padding: 2px; background: #fff; }
         .img-preview-wrapper img { max-width: 100px; max-height: 100px; display: block; border-radius: 2px; }
-        .remove-img-btn { position: absolute; top: -5px; right: -5px; background: #ef4444; color: white; border: none; border-radius: 50%; width: 18px; height: 18px; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+        .remove-img-btn { position: absolute; top: -5px; right: -5px; background: #ef4444; color: white; border: none; border-radius: 50%; width: 18px; height: 18px; font-size: 11px; cursor: pointer; }
         
         button { background: var(--primary); color: white; border: none; padding: 0.6rem 1.2rem; border-radius: 6px; font-weight: 500; cursor: pointer; transition: background 0.2s; font-size: 0.95rem; }
         button:hover { background: var(--primary-hover); }
@@ -74,7 +74,6 @@
 <body>
 
 <div class="container">
-    <!-- DASHBOARD VIEW -->
     <div id="dashboardView" class="view active">
         <header>
             <div>
@@ -116,15 +115,12 @@
                             <th>Action</th>
                         </tr>
                     </thead>
-                    <tbody id="ticketBody">
-                        <!-- Filled dynamically -->
-                    </tbody>
+                    <tbody id="ticketBody"></tbody>
                 </table>
             </div>
         </main>
     </div>
 
-    <!-- CREATE ISSUE VIEW -->
     <div id="createView" class="view">
         <header>
             <div>
@@ -187,7 +183,6 @@
     </div>
 </div>
 
-<!-- IMAGE LIGHTBOX POPUP -->
 <div id="imageLightbox" class="lightbox" onclick="closeLightbox()">
     <div class="lightbox-content" onclick="event.stopPropagation()">
         <button class="lightbox-close" onclick="closeLightbox()">&times;</button>
@@ -195,21 +190,33 @@
     </div>
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
+    // Replace with your Firebase project config
+    const firebaseConfig = {
+        apiKey: "YOUR_API_KEY",
+        authDomain: "YOUR_PROJECT.firebaseapp.com",
+        projectId: "YOUR_PROJECT_ID",
+        storageBucket: "YOUR_PROJECT.appspot.com",
+        messagingSenderId: "1234567890",
+        appId: "1:1234567890:web:abcdef123456"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
     let state = {
         nextId: 1,
         tickets: [],
         currentUsername: ""
     };
 
-    // Array to temporarily hold base64 string images logged inside the currently active form
     let currentFormImages = [];
 
-    // Helper to identify or request current username setup
     function initUserIdentity() {
         let storedUser = localStorage.getItem('teamTrackerUser');
         if (!storedUser || storedUser.startsWith("User-PC-")) {
-            // Prompt the user for an actual username instead of a placeholder computer identifier string
             let prompted = prompt("Please enter your name/username for the 'Created By' stamp:", "");
             if (prompted && prompted.trim().length > 0) {
                 storedUser = prompted.trim();
@@ -234,21 +241,10 @@
         }
     }
 
-    // Load from local storage data if available
-    if(localStorage.getItem('teamTrackerStateConfig')) {
-        try {
-            state = JSON.parse(localStorage.getItem('teamTrackerStateConfig'));
-        } catch(e) {
-            state = { nextId: 1, tickets: [] };
-        }
-    }
-
-    // Explicit function to toggle page layout views completely
     function switchView(viewId) {
         document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
         document.getElementById(viewId).classList.add('active');
-        
-        // Reset dynamic local states when loading form view
+
         if (viewId === 'createView') {
             currentFormImages = [];
             document.getElementById('issueTextContainer').innerHTML = "";
@@ -256,7 +252,6 @@
         }
     }
 
-    // Monitor input containers for paste intercept hooks (screenshots conversion)
     document.getElementById('issueTextContainer').addEventListener('paste', function(e) {
         const items = (e.clipboardData || e.originalEvent.clipboardData).items;
         for (let i = 0; i < items.length; i++) {
@@ -293,58 +288,29 @@
         renderFormImagePreviews();
     }
 
-    function saveState() {
-        localStorage.setItem('teamTrackerStateConfig', JSON.stringify(state));
-    }
-
-    function createTicket(e) {
-        e.preventDefault();
-        
-        const ticketId = `TK-${String(state.nextId).padStart(3, '0')}`;
-        const issueDescription = document.getElementById('issueTextContainer').innerText || "";
-        
-        const newTicket = {
-            id: ticketId,
-            stage: document.getElementById('stage').value,
-            book: document.getElementById('book').value,
-            chapter: document.getElementById('chapter').value,
-            issue: issueDescription,
-            images: [...currentFormImages],
-            createdBy: state.currentUsername || "Unknown User",
-            status: document.getElementById('status').value
-        };
-
-        state.tickets.push(newTicket);
-        state.nextId++;
-        
-        saveState();
-        renderTickets();
-        document.getElementById('issueForm').reset();
-        switchView('dashboardView');
-    }
-
-    function updateStatus(ticketId, newStatus) {
-        const ticket = state.tickets.find(t => t.id === ticketId);
-        if(ticket) {
-            ticket.status = newStatus;
-            saveState();
-            renderTickets();
-        }
+    function recalculateNextId() {
+        let maxNum = 0;
+        state.tickets.forEach(ticket => {
+            const match = String(ticket.id || '').match(/(\d+)/);
+            if (match) {
+                const val = Number(match[1]);
+                if (val > maxNum) maxNum = val;
+            }
+        });
+        state.nextId = maxNum + 1;
     }
 
     function renderTickets() {
         const tbody = document.getElementById('ticketBody');
         tbody.innerHTML = '';
 
-        if(!state.tickets || state.tickets.length === 0) {
+        if (!state.tickets || state.tickets.length === 0) {
             tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: #64748b; padding: 2rem;">No active logs found. Create a ticket to populate row columns.</td></tr>`;
             return;
         }
 
         state.tickets.forEach(t => {
             const row = document.createElement('tr');
-            
-            // Build visual elements if screenshot arrays exist
             let imagesHtml = '';
             if (t.images && t.images.length > 0) {
                 imagesHtml = '<div style="display:flex; gap: 4px; flex-wrap: wrap; margin-top: 4px;">';
@@ -378,41 +344,114 @@
         });
     }
 
+    function listenForTickets() {
+        db.collection('tickets')
+            .orderBy('createdAt', 'desc')
+            .onSnapshot(snapshot => {
+                state.tickets = [];
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    state.tickets.push({
+                        id: doc.id,
+                        stage: data.stage || '',
+                        book: data.book || '',
+                        chapter: data.chapter || '',
+                        issue: data.issue || '',
+                        images: Array.isArray(data.images) ? data.images : [],
+                        createdBy: data.createdBy || 'Unknown User',
+                        status: data.status || 'To Do',
+                        createdAt: data.createdAt || null
+                    });
+                });
+                recalculateNextId();
+                renderTickets();
+            }, error => {
+                console.error('Firebase error:', error);
+                alert('Unable to connect to Firebase. Please check your Firebase config and Firestore rules.');
+            });
+    }
+
+    function toTicketId() {
+        return `TK-${String(state.nextId).padStart(3, '0')}`;
+    }
+
+    function createTicket(e) {
+        e.preventDefault();
+
+        const ticketId = toTicketId();
+        const issueDescription = document.getElementById('issueTextContainer').innerText || '';
+
+        const newTicket = {
+            id: ticketId,
+            stage: document.getElementById('stage').value,
+            book: document.getElementById('book').value,
+            chapter: document.getElementById('chapter').value,
+            issue: issueDescription,
+            images: [...currentFormImages],
+            createdBy: state.currentUsername || 'Unknown User',
+            status: document.getElementById('status').value,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        db.collection('tickets').doc(ticketId).set(newTicket)
+            .then(() => {
+                document.getElementById('issueForm').reset();
+                switchView('dashboardView');
+                currentFormImages = [];
+                renderFormImagePreviews();
+                state.nextId += 1;
+            })
+            .catch(error => {
+                console.error('Create ticket error:', error);
+                alert('Ticket could not be saved to Firebase. Check Firestore permissions.');
+            });
+    }
+
+    function updateStatus(ticketId, newStatus) {
+        db.collection('tickets').doc(ticketId).update({
+            status: newStatus,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }).catch(error => {
+            console.error('Update error:', error);
+            alert('Could not update status in Firebase.');
+        });
+    }
+
     function deleteTicket(ticketId) {
-        if(confirm(`Are you sure you want to completely clear log record ${ticketId}?`)) {
-            state.tickets = state.tickets.filter(t => t.id !== ticketId);
-            saveState();
-            renderTickets();
+        if (confirm(`Are you sure you want to completely clear log record ${ticketId}?`)) {
+            db.collection('tickets').doc(ticketId).delete().catch(error => {
+                console.error('Delete error:', error);
+                alert('Could not delete ticket from Firebase.');
+            });
         }
     }
 
-    // Direct CSV export processor mapping records cleanly
     function exportToCSV() {
         if (!state.tickets || state.tickets.length === 0) {
-            alert("No data available to export yet.");
+            alert('No data available to export yet.');
             return;
         }
 
-        let csvContent = "﻿"; // Add BOM to help Excel understand UTF-8 encoding
-        csvContent += "Ticket ID,Stage,Book,Chapter,Issue Description,Created By,Status,Has Screenshots\r\n";
-        
+        let csvContent = '\uFEFF';
+        csvContent += 'Ticket ID,Stage,Book,Chapter,Issue Description,Created By,Status,Has Screenshots\r\n';
+
         state.tickets.forEach(t => {
-            // Clean up internal quotes and returns to guarantee CSV parsing structures hold clean
-            let cleanIssue = (t.issue || "").replace(/"/g, '""');
-            let cleanCreatedBy = (t.createdBy || "").replace(/"/g, '""');
-            let cleanStage = (t.stage || "").replace(/"/g, '""');
-            let cleanBook = (t.book || "").replace(/"/g, '""');
-            let cleanChapter = (t.chapter || "").replace(/"/g, '""');
-            let hasPics = (t.images && t.images.length > 0) ? "YES" : "NO";
-            
+            let cleanIssue = (t.issue || '').replace(/"/g, '""');
+            let cleanCreatedBy = (t.createdBy || '').replace(/"/g, '""');
+            let cleanStage = (t.stage || '').replace(/"/g, '""');
+            let cleanBook = (t.book || '').replace(/"/g, '""');
+            let cleanChapter = (t.chapter || '').replace(/"/g, '""');
+            let hasPics = (t.images && t.images.length > 0) ? 'YES' : 'NO';
+
             csvContent += `"${t.id}","${cleanStage}","${cleanBook}","${cleanChapter}","${cleanIssue}","${cleanCreatedBy}","${t.status}","${hasPics}"\r\n`;
         });
 
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const downloadAnchor = document.createElement('a');
-        downloadAnchor.setAttribute("href", url);
-        downloadAnchor.setAttribute("download", `issues_export_${new Date().toISOString().slice(0,10)}.csv`);
+        downloadAnchor.setAttribute('href', url);
+        downloadAnchor.setAttribute('download', `issues_export_${new Date().toISOString().slice(0,10)}.csv`);
         document.body.appendChild(downloadAnchor);
         downloadAnchor.click();
         document.body.removeChild(downloadAnchor);
@@ -425,22 +464,58 @@
         const reader = new FileReader();
         reader.onload = function(e) {
             try {
-                // Handle JSON format fallback if a state file is loaded directly
                 const imported = JSON.parse(e.target.result);
-                if (imported.nextId && Array.isArray(imported.tickets)) {
-                    state = imported;
-                    saveState();
-                    renderTickets();
-                    alert("Data state restored perfectly!");
+                if (Array.isArray(imported)) {
+                    imported.forEach(ticket => {
+                        const ticketId = ticket.id || `TK-${String(state.nextId).padStart(3, '0')}`;
+                        db.collection('tickets').doc(ticketId).set({
+                            id: ticketId,
+                            stage: ticket.stage || 'First Proof',
+                            book: ticket.book || '',
+                            chapter: ticket.chapter || '',
+                            issue: ticket.issue || '',
+                            images: Array.isArray(ticket.images) ? ticket.images : [],
+                            createdBy: ticket.createdBy || state.currentUsername,
+                            status: ticket.status || 'To Do',
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        }).catch(err => console.error('Import save error:', err));
+                        state.nextId += 1;
+                    });
+                    alert('Imported records were queued to Firebase.');
+                    return;
                 }
-            } catch(err) {
-                alert("Please ensure you are loading a valid exported structure config.");
+
+                if (imported.nextId && Array.isArray(imported.tickets)) {
+                    imported.tickets.forEach(ticket => {
+                        const ticketId = ticket.id || `TK-${String(state.nextId).padStart(3, '0')}`;
+                        db.collection('tickets').doc(ticketId).set({
+                            id: ticketId,
+                            stage: ticket.stage || 'First Proof',
+                            book: ticket.book || '',
+                            chapter: ticket.chapter || '',
+                            issue: ticket.issue || '',
+                            images: Array.isArray(ticket.images) ? ticket.images : [],
+                            createdBy: ticket.createdBy || state.currentUsername,
+                            status: ticket.status || 'To Do',
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        }).catch(err => console.error('Import save error:', err));
+                        state.nextId += 1;
+                    });
+                    alert('Imported data was sent to Firebase.');
+                    return;
+                }
+
+                alert('Please ensure you are loading a valid exported structure config.');
+            } catch (err) {
+                alert('Please ensure you are loading a valid exported structure config.');
             }
         };
+
         reader.readAsText(file);
     }
 
-    // Modal view handlers for tracking asset review magnifications
     function openLightbox(src) {
         document.getElementById('lightboxTarget').src = src;
         document.getElementById('imageLightbox').classList.add('active');
@@ -448,12 +523,12 @@
 
     function closeLightbox() {
         document.getElementById('imageLightbox').classList.remove('active');
-        document.getElementById('lightboxTarget').src = "";
+        document.getElementById('lightboxTarget').src = '';
     }
 
-    // Initialization trigger hooks
     window.onload = function() {
         initUserIdentity();
+        listenForTickets();
         renderTickets();
     };
 </script>
