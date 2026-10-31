@@ -194,14 +194,14 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
     // Replace with your Firebase project config
-    const firebaseConfig = {
-        apiKey: "YOUR_API_KEY",
-        authDomain: "YOUR_PROJECT.firebaseapp.com",
-        projectId: "YOUR_PROJECT_ID",
-        storageBucket: "YOUR_PROJECT.appspot.com",
-        messagingSenderId: "1234567890",
-        appId: "1:1234567890:web:abcdef123456"
-    };
+const firebaseConfig = {
+  apiKey: "YOUR_ACTUAL_API_KEY", // Replace with the API key you found
+  authDomain: "sts-git.firebaseapp.com",
+  projectId: "sts-git",
+  storageBucket: "sts-git.firebasestorage.app", // Use "sts-git.appspot.com" if created before Sept 2024
+  messagingSenderId: "786606023414",
+  appId: "YOUR_WEB_APP_ID" // Unique to your registered Web App
+};
 
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
